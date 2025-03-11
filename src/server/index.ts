@@ -14,22 +14,25 @@ const isProduction = process.env.NODE_ENV === "production";
 const app = express();
 const PORT = process.env.PORT || 3001; // Use 3001 as default to avoid conflicts
 
-// DEVELOPMENT MODE: Set up redirects before anything else
+// Set up fallback to index.html for client-side routes (SPA mode)
 if (!isProduction) {
-  // This must be the first middleware to catch all UI requests
+  // In development, set up catch-all route AFTER all other routes
   app.use((req, res, next) => {
+    // Log all requests in development for debugging
+    console.log(`[DEV] Server handling request: ${req.method} ${req.path}`);
+    
     // Don't redirect API requests
-    if (req.path.startsWith("/api")) {
+    if (req.path.startsWith('/api')) {
       return next();
     }
     
-    // Don't redirect asset requests (scripts, styles, images, etc.)
-    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
+    // Don't redirect static asset requests
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
       return next();
     }
-    
-    // Redirect all UI pages to webpack dev server
-    console.log(`[DEV] Redirecting ${req.path} to webpack dev server`);
+
+    // For client-side routes, let the webpack dev server handle it
+    // This is the key fix for SPA routing in development mode
     return res.redirect(`http://localhost:8080${req.url}`);
   });
 }

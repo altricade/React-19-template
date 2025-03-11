@@ -74,22 +74,16 @@ const clientDevConfig: webpack.Configuration & { devServer?: any } = merge(
       },
     },
     devServer: {
-      // Fix SPA routing for direct URL access
+      // Configure historyApiFallback for proper SPA routing
       historyApiFallback: {
-        // Don't rewrite paths that contain dots (typically static assets)
+        // Don't rewrite dotfiles
         disableDotRule: true,
-        // Serve index.html for all non-static and non-API routes
-        index: "index.html",
-        // Detailed rewrite rules for different routes
+        // Explicitly rewrite all frontend routes to index.html
         rewrites: [
-          // Explicitly rewrite specific routes to index.html
-          { from: /^\/about$/, to: "/index.html" },
-          { from: /^\/settings$/, to: "/index.html" },
-          // Catch all other routes for the SPA
-          {
-            from: /^\/((?!api|assets|js|css|images|favicon\.ico).)*$/,
-            to: "/index.html",
-          },
+          // Don't rewrite API calls
+          { from: /^\/api/, to: (context: any) => context.parsedUrl.pathname || '' },
+          // Route everything else to index.html for React Router
+          { from: /.*/, to: '/index.html' },
         ],
       },
       hot: true,
@@ -107,32 +101,7 @@ const clientDevConfig: webpack.Configuration & { devServer?: any } = merge(
         writeToDisk: true, // Write output to disk for SSR
         index: "index.html", // Serve index.html for directory requests
       },
-      // Force all WDS requests to serve index.html for client-side routing
-      setupMiddlewares: (middlewares, devServer) => {
-        if (!devServer.app) {
-          return middlewares;
-        }
 
-        // Handle direct routes like /about by serving index.html
-        devServer.app.get("*", (req: any, res: any, next: any) => {
-          // Skip API requests
-          if (req.path.startsWith("/api")) return next();
-
-          // Skip static assets (files with extensions)
-          if (
-            req.path.match(
-              /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/
-            )
-          ) {
-            return next();
-          }
-
-          // Serve index.html for all client-side routes
-          res.sendFile(path.resolve(__dirname, "../src/client/index.html"));
-        });
-
-        return middlewares;
-      },
       static: {
         directory: path.resolve(__dirname, "../src/client"), // Serve static files from src
         publicPath: "/",
