@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./src:/app/src
+      - ./webpack:/app/webpack
+    restart: unless-stopped
+    command: npm run start
+
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    command: npm run start

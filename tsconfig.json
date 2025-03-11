@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "outDir": "./dist",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    }
+  },
+  "include": ["src/**/*", "webpack/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "typeRoots": ["./node_modules/@types", "./src/types"]
+}
