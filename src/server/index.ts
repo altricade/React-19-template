@@ -9,21 +9,49 @@ import { configureStore } from "@reduxjs/toolkit";
 import App from "../client/App";
 import rootReducer from "../client/redux/rootReducer";
 
+// Read environment variables
+const isProduction = process.env.NODE_ENV === "production";
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001; // Use 3001 as default to avoid conflicts
 
-// Serve static files
+// DEVELOPMENT MODE: Set up redirects before anything else
+if (!isProduction) {
+  // This must be the first middleware to catch all UI requests
+  app.use((req, res, next) => {
+    // Don't redirect API requests
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
+    
+    // Don't redirect asset requests (scripts, styles, images, etc.)
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
+      return next();
+    }
+    
+    // Redirect all UI pages to webpack dev server
+    console.log(`[DEV] Redirecting ${req.path} to webpack dev server`);
+    return res.redirect(`http://localhost:8080${req.url}`);
+  });
+}
+
+// Serve static files - both from dev and prod locations
 app.use(express.static(path.resolve(__dirname, "../client")));
+
+// In development, also serve from the webpack output directory
+if (!isProduction) {
+  app.use(express.static(path.resolve(__dirname, "../../dist/client")));
+}
 
 // API endpoint example
 app.get("/api/users/:id", (req, res) => {
   const userId = parseInt(req.params.id);
 
   // Mock user data for demonstration
-  const mockUsers: Record<number, { id: number; name: string; email: string }> = {
-    1: { id: 1, name: "John Doe", email: "john@example.com" },
-    2: { id: 2, name: "Jane Smith", email: "jane@example.com" },
-  };
+  const mockUsers: Record<number, { id: number; name: string; email: string }> =
+    {
+      1: { id: 1, name: "John Doe", email: "john@example.com" },
+      2: { id: 2, name: "Jane Smith", email: "jane@example.com" },
+    };
 
   const user = mockUsers[userId];
 
@@ -45,33 +73,58 @@ app.get("*", (req, res) => {
   const preloadedState = store.getState();
 
   // Read the HTML template
-  const indexHtml = fs.readFileSync(
-    path.resolve(__dirname, "../client/index.html"),
-    "utf8"
-  );
+  let indexHtml;
+  try {
+    // Try to read from the build directory first (for production)
+    indexHtml = fs.readFileSync(
+      path.resolve(__dirname, "../client/index.html"),
+      "utf8"
+    );
+  } catch (error) {
+    // Fallback to source directory (for development)
+    indexHtml = fs.readFileSync(
+      path.resolve(__dirname, "../../src/client/index.html"),
+      "utf8"
+    );
+  }
 
   // Split the HTML template to inject our React app
   const [startingHtml, endingHtml] = indexHtml.split('<div id="root"></div>');
 
   // Replace the initial state placeholder with actual state
   const finalHtml = endingHtml.replace(
-    "__INITIAL_STATE__",
-    JSON.stringify(preloadedState).replace(/</g, "\\u003c")
+    "window.__INITIAL_STATE__ = {};",
+    `window.__INITIAL_STATE__ = ${JSON.stringify(preloadedState).replace(/</g, "\\u003c")};`
   );
 
+  // In development mode, skip SSR to avoid hydration issues during active development
+  if (!isProduction) {
+    // For development, just send the shell (no SSR)
+    res.send(indexHtml);
+    return;
+  }
+  
+  // In production, important paths like /about should also work with SSR
+  // Log the requested URL for debugging
+  console.log(`[SSR] Rendering route: ${req.url}`);
+  
+  // Check for known client routes to ensure proper SSR handling
+  const isKnownRoute = ['/', '/about'].includes(req.path);
+
+  // For production, proceed with SSR
   // Send the starting part of HTML
   res.write(startingHtml);
   res.write('<div id="root">');
 
-  // Stream the React app
+  // Stream the React app (only in production)
   const { pipe } = renderToPipeableStream(
     React.createElement(
       StaticRouter,
       { location: req.url },
-      React.createElement(
-        Provider,
-        { store: store, children: React.createElement(App, null) }
-      )
+      React.createElement(Provider, {
+        store: store,
+        children: React.createElement(App, null),
+      })
     ),
     {
       bootstrapScripts: [

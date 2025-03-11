@@ -14,7 +14,7 @@ const HomePage: React.FC = () => {
         <p className="text-gray-600 dark:text-gray-300 mb-6">
           Welcome to your new React 19 application with SSR, Redux Toolkit,
           Tailwind CSS, and more. This template provides a solid foundation for
-          building modern web applications.
+          building modern web.
         </p>
         <div className="flex flex-wrap gap-4">
           <a

@@ -6,4 +6,9 @@ require('ts-node').register({
   }
 });
 
-module.exports = require('./webpack/client.dev').default;
+const config = require('./webpack/client.dev').default;
+
+// Explicitly set mode to avoid webpack warning
+config.mode = 'development';
+
+module.exports = config;

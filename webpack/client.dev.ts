@@ -15,28 +15,153 @@ const clientDevConfig: webpack.Configuration & { devServer?: any } = merge(
     devtool: "inline-source-map",
     output: {
       filename: "js/[name].js",
+      publicPath: "/",
     },
     optimization: {
       minimize: false,
       runtimeChunk: "single",
+      splitChunks: {
+        chunks: "all",
+        maxInitialRequests: Infinity,
+        minSize: 20000,
+        maxSize: 200000,
+        cacheGroups: {
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            priority: -10,
+            name(module: { context: string }) {
+              // Get the name. E.g. node_modules/packageName/not/this/part.js
+              // or node_modules/packageName
+              const packageName =
+                module.context.match(
+                  /[\\/]node_modules[\\/]([^\\/]+)([\\/]|$)/
+                )?.[1] || "vendor";
+
+              // Create separate chunks for larger packages
+              return `npm.${packageName.replace("@", "")}`;
+            },
+          },
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+            name: "npm.react",
+            priority: 10,
+            reuseExistingChunk: false,
+          },
+          redux: {
+            test: /[\\/]node_modules[\\/](@?redux|@reduxjs)[\\/]/,
+            name: "npm.redux",
+            priority: 5,
+            reuseExistingChunk: false,
+          },
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+        },
+      },
+    },
+    performance: {
+      hints: process.env.NODE_ENV === "production" ? "warning" : false,
+      maxEntrypointSize: 1024000, // 1MB
+      maxAssetSize: 1024000,
+      assetFilter: (assetFilename: string) => {
+        // Don't check size of map files or images
+        return (
+          !/\.map$/.test(assetFilename) &&
+          !/\.(png|jpg|jpeg|gif|svg)$/.test(assetFilename)
+        );
+      },
     },
     devServer: {
-      historyApiFallback: true,
+      // Fix SPA routing for direct URL access
+      historyApiFallback: {
+        // Don't rewrite paths that contain dots (typically static assets)
+        disableDotRule: true,
+        // Serve index.html for all non-static and non-API routes
+        index: "index.html",
+        // Detailed rewrite rules for different routes
+        rewrites: [
+          // Explicitly rewrite specific routes to index.html
+          { from: /^\/about$/, to: "/index.html" },
+          { from: /^\/settings$/, to: "/index.html" },
+          // Catch all other routes for the SPA
+          {
+            from: /^\/((?!api|assets|js|css|images|favicon\.ico).)*$/,
+            to: "/index.html",
+          },
+        ],
+      },
       hot: true,
-      port: 3000,
+      port: 8080,
       compress: true,
       client: {
         overlay: {
           errors: true,
           warnings: false,
         },
+        progress: true,
       },
+      devMiddleware: {
+        publicPath: "/",
+        writeToDisk: true, // Write output to disk for SSR
+        index: "index.html", // Serve index.html for directory requests
+      },
+      // Force all WDS requests to serve index.html for client-side routing
+      setupMiddlewares: (middlewares, devServer) => {
+        if (!devServer.app) {
+          return middlewares;
+        }
+
+        // Handle direct routes like /about by serving index.html
+        devServer.app.get("*", (req: any, res: any, next: any) => {
+          // Skip API requests
+          if (req.path.startsWith("/api")) return next();
+
+          // Skip static assets (files with extensions)
+          if (
+            req.path.match(
+              /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/
+            )
+          ) {
+            return next();
+          }
+
+          // Serve index.html for all client-side routes
+          res.sendFile(path.resolve(__dirname, "../src/client/index.html"));
+        });
+
+        return middlewares;
+      },
+      static: {
+        directory: path.resolve(__dirname, "../src/client"), // Serve static files from src
+        publicPath: "/",
+        watch: true,
+      },
+      proxy: [
+        {
+          context: ["/api"],
+          target: "http://localhost:3001",
+          secure: false,
+          changeOrigin: true,
+        },
+      ],
     },
     plugins: [
       new webpack.DefinePlugin({
         "process.env.NODE_ENV": JSON.stringify("development"),
+        global: JSON.stringify({}),
+        // Force React to use development mode
+        "process.env": JSON.stringify({
+          NODE_ENV: "development",
+        }),
+        __DEV__: true,
       }),
-      new ReactRefreshWebpackPlugin(),
+      new webpack.HotModuleReplacementPlugin(),
+      new ReactRefreshWebpackPlugin({
+        overlay: false, // Disable error overlay to use our custom one
+        exclude: [/node_modules/],
+      }),
       new DotenvWebpack({
         path: path.resolve(__dirname, "../.env.development"),
         defaults: path.resolve(__dirname, "../.env"),
